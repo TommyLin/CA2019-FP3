@@ -24,19 +24,19 @@ char** generateSuffixes(char *read, int byte_length);
 char ctable[5] = {'$', 'A', 'C', 'G', 'T'};
 
 void print_string(char **str, int len){
-	for(int z = 0; z < len ; z++){
-		printf("%d", z);
-	}
-	printf("\n");
-	for(int z = 0; z < len ; z++){
-		printf("%c", ctable[*str[z]>>4]);
+	printf("=== string address ===\n");
+	for (int i = 0; i < len; i++) {
+		for(int z = 0; z < len ; z++){
+			printf("%p ", &(str[i][z]));
+		}
+		printf("\n");
 	}
 	printf("\n");
 
-	printf("======\n");
+	printf("==================================\n");
 	for (int i = 0; i < len; i++) {
 		for (int z = 0; z < len; z++){
-			printf("%c", ctable[str[i][z]>>4]);
+			printf("%c %c  ", ctable[str[i][z]>>4], ctable[str[i][z]&0xF]);
 		}
 		printf("\n");
 	}
