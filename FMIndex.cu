@@ -167,10 +167,6 @@ void pipeline_stu(char **reads, int read_length, int read_count){
 		cout << "read_length = " << read_length << endl;
 		for(int z = 0; z < read_length ; z++){
 			//char temp = (z%2==0)?(*suffixes_for_read[z]&0x0f):(*suffixes_for_read[z]&0xf0);
-			printf("%d: 0x%08X %c %c\n", z,
-					*suffixes_for_read[z],
-					ctable[*suffixes_for_read[z]>>4],
-					ctable[*suffixes_for_read[z]&0x0f]);
 		}
 		print_string(suffixes_for_read, read_length);
 			//cout<<**suffixes_for_read <<endl;
