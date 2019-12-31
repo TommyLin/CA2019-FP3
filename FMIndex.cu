@@ -23,19 +23,23 @@ char* fourbitEncodeRead(char *read, int length);
 char** generateSuffixes(char *read, int byte_length);
 char ctable[5] = {'$', 'A', 'C', 'G', 'T'};
 
-void print_string(char *str, int len){
+void print_string(char **str, int len){
 	for(int z = 0; z < len ; z++){
 		printf("%d", z);
 	}
 	printf("\n");
 	for(int z = 0; z < len ; z++){
-		printf("%d", str[z]>>4);
+		printf("%c", ctable[*str[z]>>4]);
 	}
 	printf("\n");
-	for(int z = 0; z < len ; z++){
-		printf("%c", ctable[str[z]>>4]);
+
+	printf("======\n");
+	for (int i = 0; i < len; i++) {
+		for (int z = 0; z < len; z++){
+			printf("%c", ctable[str[i][z]>>4]);
+		}
+		printf("\n");
 	}
-	printf("\n");
 }
 
 __global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value, int read_length, int read_count){
@@ -168,7 +172,7 @@ void pipeline_stu(char **reads, int read_length, int read_count){
 					ctable[*suffixes_for_read[z]>>4],
 					ctable[*suffixes_for_read[z]&0x0f]);
 		}
-		print_string(*suffixes_for_read, read_length);
+		print_string(suffixes_for_read, read_length);
 			//cout<<**suffixes_for_read <<endl;
 		//bitonic_sort(suffixes_for_read);
         //sort_fourbit_suffixes(suffixes_for_read, read_length, read_length/2);
