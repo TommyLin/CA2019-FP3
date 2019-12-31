@@ -14,6 +14,164 @@ using namespace std;
 //You need to create the function prototypes and definitions as per your design, but you need to present final results in this array
 //-----------------------------Structures for correctness check-------------------
 char **fourbit_sorted_suffixes_student;
+int read_count = 0;
+int read_length = 0;
+int num_value = 0;
+char **fourbit_sorted_suffixes_original;
+int BLOCKS, THREADS;
+char* fourbitEncodeRead(char *read, int length);
+char** generateSuffixes(char *read, int byte_length);
+char ctable[5] = {'$', 'A', 'C', 'G', 'T'};
+
+
+__global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value, int read_length, int read_count){
+    //printf("gfdgfdgdsfg\n");
+    int flag = 0;
+	unsigned int i, ixj; /* Sorting partners: i and ixj */
+    i = threadIdx.x + blockDim.x * blockIdx.x;
+    ixj = i^j;
+    int temp_char_i,temp_char_ixj;
+
+    /* The threads with the lowest ids sort the array. */
+    flag = 0;
+
+    if ((ixj)>i) {
+        for(int l=0;l<read_length;l++){
+			if(i%2==0) temp_char_i = dev_values[i*read_length+l]&(0x0F);
+			else if(i%2==0) temp_char_i = dev_values[i*read_length+l]&(0xF0);
+			if(i%2==0) temp_char_ixj = dev_values[ixj*read_length+l]&(0x0F);
+			else if(i%2==0) temp_char_ixj = dev_values[ixj*read_length+l]&(0xF0);
+            if(temp_char_i>temp_char_ixj){
+                //if(i==0&&i*read_length+l==fir*65 && ixj*read_length+l==sec*65)printf(">>>>>>>>>>>>>>>>>>\n");
+                flag = 1;
+                break;
+            }
+            else if(temp_char_i<temp_char_ixj){
+                //if(i==0&&i*read_length+l==fir*65 && ixj*read_length+l==sec*65)printf("<<<<<<<<<<<<<<<<<<<<\n");
+                flag = -1;
+                break;
+            }
+            //if(i==0&&i*read_length+l==fir*65 && ixj*read_length+l==sec*65)printf("=========================\n");
+            flag = 0;
+
+        }
+        //printf("i=%d, ixj=%d, sorting result flag = %d\n",i,ixj,flag);
+
+
+        if ((i&k)==0) {
+            // Sort ascending //
+            //printf("1110");
+            //for(int m=0;m<num_value;m++){
+
+                if (flag==1) {
+                    //printf("3333, %d, %d\n", i, ixj);
+                    char* temp;
+					temp = (char*)malloc(sizeof(char)*read_length);
+					memcpy(temp, &dev_values[i*read_length], read_length*sizeof(char));
+					memcpy(&dev_values[i*read_length], &dev_values[ixj*read_length], read_length*sizeof(char));
+					memcpy(&dev_values[ixj*read_length], temp, read_length*sizeof(char));
+					free(temp);
+                }
+        }
+        if ((i&k)!=0) {
+            // Sort descending
+
+            if (flag==-1) {
+                //printf("2222, %d, %d\n", i, ixj);
+                char* temp;
+                temp = (char*)malloc(sizeof(char)*read_length);
+                memcpy(temp, &dev_values[i*read_length], read_length*sizeof(char));
+                memcpy(&dev_values[i*read_length], &dev_values[ixj*read_length], read_length*sizeof(char));
+                memcpy(&dev_values[ixj*read_length], temp, read_length*sizeof(char));
+				free(temp);
+            }
+        }
+    }
+}
+void bitonic_sort(char **values){
+    char *dev_values;
+    size_t size = read_length * sizeof(char);
+    char *temp;
+    char *temp_char = new char[read_length];
+    temp = (char*)malloc(num_value*size);
+    for(int i=0;i<read_length;i++){
+        temp_char[i]='T';
+    }
+    for(int i=0;i<num_value;i++){
+        if(i<read_length*read_count){
+            memcpy(&temp[i*read_length],values[i],read_length*sizeof(char));
+        }
+        else{
+            memcpy(&temp[i*read_length],temp_char,read_length*sizeof(char));
+        }
+    }
+    cudaMalloc((void**) &dev_values, size*num_value);
+
+    cudaMemcpy(dev_values, temp, num_value*size, cudaMemcpyHostToDevice);
+
+    dim3 blocks(BLOCKS,1);    /* Number of blocks   */
+    dim3 threads(THREADS,1);  /* Number of threads  */
+
+    int j, k;
+    /* Major step */
+
+    for (k = 2; k <= num_value; k <<= 1) {
+        //* Minor step */
+        for (j=k>>1; j>0; j=j>>1) {
+			bitonic_sort_step<<<blocks, threads>>>(dev_values, j, k, num_value,read_length, read_count);
+		}
+    }
+
+    cudaMemcpy(temp, dev_values, read_length*read_count*size, cudaMemcpyDeviceToHost);
+
+    //cout<<"begin teeeeeeeeeeeeeeeeeeeeeeeeeeeeeemp"<<endl;
+
+
+	free(temp);
+    cudaFree(dev_values);
+}
+
+
+void pipeline_stu(char **reads, int read_length, int read_count){
+	int temp_stu = ceil(log2((float)read_length));
+	num_value = pow(2,temp_stu);
+	if(num_value<=256){
+		THREADS = num_value;
+		BLOCKS = 1;
+	}
+	else{
+		THREADS = 256;
+		BLOCKS = num_value/THREADS;
+	}
+    fourbit_sorted_suffixes_student = (char**)malloc(read_length*read_count*sizeof(char*));
+    for(int i=0;i<read_count;i++){
+        char **suffixes_for_read = generateSuffixes(fourbitEncodeRead(reads[i], read_length), read_length/2);
+		cout << "read_length = " << read_length << endl;
+		for(int z = 0; z < read_length ; z++){
+			//char temp = (z%2==0)?(*suffixes_for_read[z]&0x0f):(*suffixes_for_read[z]&0xf0);
+			printf("%d: 0x%08X %c %c\n", z,
+					*suffixes_for_read[z],
+					ctable[*suffixes_for_read[z]>>4],
+					ctable[*suffixes_for_read[z]&0x0f]);
+		}
+			//cout<<**suffixes_for_read <<endl;
+		//bitonic_sort(suffixes_for_read);
+        //sort_fourbit_suffixes(suffixes_for_read, read_length, read_length/2);
+        for(int j=0;j<read_length;j++){
+            fourbit_sorted_suffixes_student[i*read_length+j] = suffixes_for_read[j];
+        }
+    }
+
+    //--------------For debug purpose--------------
+    /*
+    for(int i=0;i<read_count*read_length;i++){
+        for(int j=0;j<read_length/2;j++)
+            printf("%x\t",fourbit_sorted_suffixes_original[i][j]);
+        printf("\n");
+    }*/
+    //---------------------------------------------
+}
+
 //--------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------------------------------
@@ -21,11 +179,10 @@ char **fourbit_sorted_suffixes_student;
 
 //-----------------------DO NOT CHANGE AT ALL--------------------------------------------
 
-int read_count = 0;
-int read_length = 0;
+
 
 //This array is the default result
-char **fourbit_sorted_suffixes_original;
+
 
 
 //Read file to get reads
@@ -87,6 +244,7 @@ char* rotateRead(char *read, int byte_length){
         rotated_read[i] = read[i];
     return rotated_read;
 }
+
 
 //Generate Sufixes for a 4-bit encoded read
 char** generateSuffixes(char *read, int byte_length){
@@ -151,6 +309,7 @@ void pipeline(char **reads, int read_length, int read_count){
     for(int i=0;i<read_count;i++){
         char **suffixes_for_read = generateSuffixes(fourbitEncodeRead(reads[i], read_length), read_length/2);
         sort_fourbit_suffixes(suffixes_for_read, read_length, read_length/2);
+
         for(int j=0;j<read_length;j++){
             fourbit_sorted_suffixes_original[i*read_length+j] = suffixes_for_read[j];
         }
@@ -173,9 +332,8 @@ void mergeAllSorted4bitSuffixes(char** suffixes, int read_count, int read_length
 //-----------------------DO NOT CHANGE--------------------------------------------
 
 int main(int argc, char *argv[]){
-
     char **reads = inputReads(argv[1], &read_count, &read_length);//Input reads from file
-    
+
     //-----------Default implementation----------------
     //-----------Time capture start--------------------
     struct timeval  TimeValue_Start;
@@ -186,10 +344,9 @@ int main(int argc, char *argv[]){
     double time_overhead_default, time_overhead_student;
 
     gettimeofday(&TimeValue_Start, &TimeZone_Start);
-
     pipeline(reads, read_length, read_count);
     mergeAllSorted4bitSuffixes(fourbit_sorted_suffixes_original, read_count, read_length);
-    
+
     gettimeofday(&TimeValue_Final, &TimeZone_Final);
     time_start = TimeValue_Start.tv_sec * 1000000 + TimeValue_Start.tv_usec;
     time_end = TimeValue_Final.tv_sec * 1000000 + TimeValue_Final.tv_usec;
@@ -198,12 +355,13 @@ int main(int argc, char *argv[]){
     //------------Time capture end----------------------
     //--------------------------------------------------
 
-    
+
     //-----------Your implementations------------------
     gettimeofday(&TimeValue_Start, &TimeZone_Start);
     time_start = TimeValue_Start.tv_sec * 1000000 + TimeValue_Start.tv_usec;
     //-----------Call your functions here--------------------
-
+	cout<<"pipeline_stu"<<endl;
+	pipeline_stu(reads, read_length, read_count);
 
     //-----------Call your functions here--------------------
     time_end = TimeValue_Final.tv_sec * 1000000 + TimeValue_Final.tv_usec;
@@ -212,10 +370,12 @@ int main(int argc, char *argv[]){
 
 
     //---------------Correction check and speedup calculation----------------------
+#if 0
     float speedup=0.0;
-    //if(checker()==1)
-    //    speedup = time_overhead_default/time_overhead_student;
+    if(checker()==1)
+        speedup = time_overhead_default/time_overhead_student;
     cout<<"Speedup="<<speedup<<endl;
     //-----------------------------------------------------------------------------
+#endif
     return 0;
 }
