@@ -21,7 +21,8 @@ char **fourbit_sorted_suffixes_original;
 int BLOCKS, THREADS;
 char* fourbitEncodeRead(char *read, int length);
 char** generateSuffixes(char *read, int byte_length);
-char ctable[5] = {'$', 'A', 'C', 'G', 'T'};
+char ctable[] = {'$', 'A', 'C', 'G', 'T', '5', '6', '7',
+	'8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
 void print_string(char **str, int len){
 	printf("=== string address ===\n");
@@ -33,10 +34,15 @@ void print_string(char **str, int len){
 	}
 	printf("\n");
 
-	printf("==================================\n");
+	printf("================================\n");
+	for (int i = 0; i < 2 * len; i++) {
+		printf(" %X", i);
+	}
+	printf("\n--------------------------------\n");
+
 	for (int i = 0; i < len; i++) {
 		for (int z = 0; z < len; z++){
-			printf("%c %c  ", ctable[str[i][z]>>4], ctable[str[i][z]&0xF]);
+			printf(" %c %c", ctable[str[i][z]>>4], ctable[str[i][z]&0xF]);
 		}
 		printf("\n");
 	}
