@@ -23,11 +23,13 @@ char* fourbitEncodeRead(char *read, int length);
 char** generateSuffixes(char *read, int byte_length);
 char ctable[] = {'$', 'A', 'C', 'G', 'T', '5', '6', '7',
 	'8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+	
+char **student;
 
-void print_string(char **str, int len){
+void print_string_2d(char **str, int len){
 	printf("=== string address ===\n");
 	for (int i = 0; i < len; i++) {
-		for(int z = 0; z < len ; z++){
+		for(int z = 0; z < len/2 ; z++){
 			printf("%p ", &(str[i][z]));
 		}
 		printf("\n");
@@ -38,15 +40,36 @@ void print_string(char **str, int len){
 	for (int i = 0; i < 2 * len; i++) {
 		printf(" %X", i);
 	}
-	printf("\n--------------------------------\n");
+	printf("\n============== 2d print ==============\n");
 
 	for (int i = 0; i < len; i++) {
-		for (int z = 0; z < len; z++){
-			printf(" %c %c", ctable[str[i][z]>>4], ctable[str[i][z]&0xF]);
+		for (int z = 0; z < len/2; z++){
+			printf(" %c %c", ctable[str[i][z]>>4], ctable[str[i][z] &0xF]);
 		}
 		printf("\n");
 	}
 }
+void print_string_1d(char *str, int len){
+	printf("=== string address ===\n");
+	cout<<"input string is "<<str<<endl;
+	cout<<"lengh = "<<len<<endl;
+	cout<<"num_value = "<<num_value<<endl;
+
+	printf("================================\n");
+	for (int i = 0; i < 2 * len; i++) {
+		printf(" %X", i);
+	}
+	printf("\n============== 1d print ==============\n");
+
+	for (int i = 0; i < num_value; i++) {
+		for (int z = 0; z < len/2; z++){
+			printf(" %c %c", ctable[str[(i*len/2+z)]>>4 ], ctable[str[i*len/2+z] &0xF]);
+		}		
+		printf("\n");
+	}
+	printf("\n============== 1d print ==============\n");
+}
+
 
 __global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value, int read_length, int read_count){
     //printf("gfdgfdgdsfg\n");
@@ -54,20 +77,26 @@ __global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value,
 	unsigned int i, ixj; /* Sorting partners: i and ixj */
     i = threadIdx.x + blockDim.x * blockIdx.x;
     ixj = i^j;
-    int temp_char_i,temp_char_ixj;
-
+    char temp_char_i,temp_char_ixj;
+	printf("input string = %s\n",dev_values);
     /* The threads with the lowest ids sort the array. */
     flag = 0;
-
     if ((ixj)>i) {
         for(int l=0;l<read_length;l++){
-			if(i%2==0) temp_char_i = dev_values[i*read_length+l]&(0x0F);
-			else if(i%2==0) temp_char_i = dev_values[i*read_length+l]&(0xF0);
-			if(i%2==0) temp_char_ixj = dev_values[ixj*read_length+l]&(0x0F);
-			else if(i%2==0) temp_char_ixj = dev_values[ixj*read_length+l]&(0xF0);
-            if(temp_char_i>temp_char_ixj){
+			printf("lower char for i = %c\n",dev_values[i*read_length/2+l]&(0xF));
+			printf("higher char for i = %c\n",(dev_values[i*read_length/2+l]&(0xF0))>>4);
+			
+			printf("lower char for ixj = %c\n",dev_values[ixj*read_length/2+l]&(0xF));
+			printf("higher char for ixj = %c\n",(dev_values[ixj*read_length/2+l]&(0xF0))>>4);
+			
+			if(i%2==0) temp_char_i = dev_values[i*read_length/2+l]&(0xF);
+			else if(i%2==1) temp_char_i = dev_values[i*read_length/2+l]>>4;
+			if(ixj%2==0) temp_char_ixj = dev_values[ixj*read_length/2+l]&(0xF);
+			else if(ixj%2==1) temp_char_ixj = dev_values[ixj*read_length/2+l]>>4;
+            printf("compare data:\n%d\t%c\n%d\t%c\n",i,temp_char_i,ixj,temp_char_ixj);
+			if(temp_char_i>temp_char_ixj){
                 //if(i==0&&i*read_length+l==fir*65 && ixj*read_length+l==sec*65)printf(">>>>>>>>>>>>>>>>>>\n");
-                flag = 1;
+				flag = 1;
                 break;
             }
             else if(temp_char_i<temp_char_ixj){
@@ -90,10 +119,10 @@ __global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value,
                 if (flag==1) {
                     //printf("3333, %d, %d\n", i, ixj);
                     char* temp;
-					temp = (char*)malloc(sizeof(char)*read_length);
-					memcpy(temp, &dev_values[i*read_length], read_length*sizeof(char));
-					memcpy(&dev_values[i*read_length], &dev_values[ixj*read_length], read_length*sizeof(char));
-					memcpy(&dev_values[ixj*read_length], temp, read_length*sizeof(char));
+					temp = (char*)malloc(sizeof(char)*read_length/2);
+					memcpy(temp, &dev_values[i*read_length/2], read_length/2*sizeof(char));
+					memcpy(&dev_values[i*read_length/2], &dev_values[ixj*read_length/2], read_length/2*sizeof(char));
+					memcpy(&dev_values[ixj*read_length/2], temp, read_length/2*sizeof(char));
 					free(temp);
                 }
         }
@@ -102,31 +131,31 @@ __global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value,
 
             if (flag==-1) {
                 //printf("2222, %d, %d\n", i, ixj);
-                char* temp;
-                temp = (char*)malloc(sizeof(char)*read_length);
-                memcpy(temp, &dev_values[i*read_length], read_length*sizeof(char));
-                memcpy(&dev_values[i*read_length], &dev_values[ixj*read_length], read_length*sizeof(char));
-                memcpy(&dev_values[ixj*read_length], temp, read_length*sizeof(char));
-				free(temp);
+                    char* temp;
+					temp = (char*)malloc(sizeof(char)*read_length/2);
+					memcpy(temp, &dev_values[i*read_length/2], read_length/2*sizeof(char));
+					memcpy(&dev_values[i*read_length/2], &dev_values[ixj*read_length/2], read_length/2*sizeof(char));
+					memcpy(&dev_values[ixj*read_length/2], temp, read_length/2*sizeof(char));
+					free(temp);
             }
         }
     }
 }
 void bitonic_sort(char **values){
     char *dev_values;
-    size_t size = read_length * sizeof(char);
+    size_t size = read_length/2 * sizeof(char);
     char *temp;
-    char *temp_char = new char[read_length];
+    char *temp_char = new char[read_length/2];
     temp = (char*)malloc(num_value*size);
-    for(int i=0;i<read_length;i++){
-        temp_char[i]='T';
+    for(int i=0;i<read_length/2;i++){
+        temp_char[i]=0x44;
     }
     for(int i=0;i<num_value;i++){
         if(i<read_length*read_count){
-            memcpy(&temp[i*read_length],values[i],read_length*sizeof(char));
+            memcpy(&temp[i*read_length/2],values[i],size);
         }
         else{
-            memcpy(&temp[i*read_length],temp_char,read_length*sizeof(char));
+            memcpy(&temp[i*read_length/2],temp_char,size);
         }
     }
     cudaMalloc((void**) &dev_values, size*num_value);
@@ -135,19 +164,37 @@ void bitonic_sort(char **values){
 
     dim3 blocks(BLOCKS,1);    /* Number of blocks   */
     dim3 threads(THREADS,1);  /* Number of threads  */
-
+	cout<<"=========== before temp ==========="<<endl;
+	print_string_1d (temp,read_length*read_count);
+	cout<<"=========== after temp ==========="<<endl;
     int j, k;
     /* Major step */
 
-    for (k = 2; k <= num_value; k <<= 1) {
+    for (k = 2; k <= 2; k <<= 1) {
         //* Minor step */
         for (j=k>>1; j>0; j=j>>1) {
 			bitonic_sort_step<<<blocks, threads>>>(dev_values, j, k, num_value,read_length, read_count);
 		}
     }
-
+	
     cudaMemcpy(temp, dev_values, read_length*read_count*size, cudaMemcpyDeviceToHost);
+	
+	 for(int i=0;i<read_length*read_count;i++){
 
+        memcpy(values[i],&temp[i*read_length/2],read_length/2*sizeof(char));
+
+    }  
+	
+	
+    /*for(int i=0;i<num_value;i++){
+        if(i<read_length*read_count){
+            memcpy(values[i],&temp[i*read_length],read_length*sizeof(char));
+        }
+        else{
+            memcpy(temp_char,&temp[i*read_length],read_length*sizeof(char));
+        }
+    }	*/
+	print_string_2d(values, read_length);
     //cout<<"begin teeeeeeeeeeeeeeeeeeeeeeeeeeeeeemp"<<endl;
 
 
@@ -174,14 +221,16 @@ void pipeline_stu(char **reads, int read_length, int read_count){
 		for(int z = 0; z < read_length ; z++){
 			//char temp = (z%2==0)?(*suffixes_for_read[z]&0x0f):(*suffixes_for_read[z]&0xf0);
 		}
-		print_string(suffixes_for_read, read_length);
+		print_string_2d(suffixes_for_read, read_length);
+		bitonic_sort(suffixes_for_read);
 			//cout<<**suffixes_for_read <<endl;
-		//bitonic_sort(suffixes_for_read);
         //sort_fourbit_suffixes(suffixes_for_read, read_length, read_length/2);
         for(int j=0;j<read_length;j++){
             fourbit_sorted_suffixes_student[i*read_length+j] = suffixes_for_read[j];
         }
     }
+	
+	
 
     //--------------For debug purpose--------------
     /*
