@@ -26,14 +26,14 @@ char ctable[] = {'$', 'A', 'C', 'G', 'T', '5', '6', '7',
 	
 char **student;
 
-void print_string_2d(char **str, int len){
+void print_string_2d(char **str, int len , int cnt){
 	printf("=== string address ===\n");
-	for (int i = 0; i < len; i++) {
-		for(int z = 0; z < len/2 ; z++){
-			printf("%p ", &(str[i][z]));
-		}
-		printf("\n");
-	}
+	//for (int i = 0; i < len*cnt; i++) {
+	//	for(int z = 0; z < len/2 ; z++){
+	//		printf("%p ", &(str[i][z]));
+	//	}
+	//	printf("\n");
+	//}
 	printf("\n");
 
 	printf("================================\n");
@@ -41,8 +41,9 @@ void print_string_2d(char **str, int len){
 		printf(" %X", i);
 	}
 	printf("\n============== 2d print ==============\n");
+	printf("============== read_count = %d ==============\n",read_count);
 
-	for (int i = 0; i < len; i++) {
+	for (int i = 0; i < len*cnt; i++) {
 		for (int z = 0; z < len/2; z++){
 			printf(" %c %c", ctable[str[i][z]>>4], ctable[str[i][z] &0xF]);
 		}
@@ -69,43 +70,154 @@ void print_string_1d(char *str, int len){
 	}
 	printf("\n============== 1d print ==============\n");
 }
+/*
+__global__ void generateSuffixes_gpu(){
+	
+	
+}*/
+__global__ void fourbitEncodeRead_gpu(char *dev_read, int length, int i){
+	int byte_length = length/2;
+    //char *fourbit_read = (char*)calloc(byte_length,sizeof(char));	
+    //for(i=0;i<length;i++){
+        char this_char = dev_read[i];
+        char fourbit_char;
+        if(this_char == '$')
+            fourbit_char = 0x00;
+        else if(this_char == 'A')
+            fourbit_char = 0x01;
+        else if(this_char == 'C')
+            fourbit_char = 0x02;
+        else if(this_char == 'G')
+            fourbit_char = 0x03;
+        else
+            fourbit_char = 0x04;
+        fourbit_char = i%2==0 ? fourbit_char << 4 : fourbit_char;
+        dev_read[i/2] = dev_read[i/2] | fourbit_char;
+        //fourbit_read[i/2] = fourbit_read[i/2] | fourbit_char;
+    //}
+}
+
+char* fourbitEncodeRead_stu(char *read, int length){
+    int byte_length = length/2;
+    char *fourbit_read = (char*)calloc(byte_length,sizeof(char));
+	char *dev_read;
+	cudaMalloc((void**) &dev_read, length*sizeof(char));
+	cudaMemcpy(dev_read, read, length*sizeof(char), cudaMemcpyHostToDevice);
+	dim3 blocks(BLOCKS,1);    /* Number of blocks   */
+    dim3 threads(THREADS,1);  /* Number of threads  */
+    for(int i=0;i<length;i++){		
+        fourbitEncodeRead_gpu <<<blocks, threads>>> (dev_read, length , i);
+    }
+	cudaMemcpy(fourbit_read, dev_read, byte_length*sizeof(char) , cudaMemcpyDeviceToHost);
+   return fourbit_read;
+}
+
+__global__ void rotateRead_gpu_part1(char *dev_read, int i , char prev_4bit){
+	//char prev_4bit = (dev_read[i-1] & 0x0F) << 4;
+	char this_char = ((dev_read[i] >> 4) & 0x0F) | prev_4bit;
+	
+	//printf("i=%d\tinput read is %x\tthis_char is %x\t prev_4bit is %x\n",i,dev_read[i],this_char,prev_4bit);
+	dev_read[i] = this_char;
+	//printf("i=%d\tinput read is %x\tthis_char is %x\t prev_4bit is %x\n",i,dev_read[i],this_char,prev_4bit);
+}
+
+
+char* rotateRead_stu(char *read, int byte_length){
+	
+    char prev_4bit = (read[0] & 0x0F) << 4;
+	char *dev_read;
+	dim3 blocks(BLOCKS,1);    
+    dim3 threads(THREADS,1);  
+	cudaMalloc((void**) &dev_read, byte_length*sizeof(char));
+	cudaMemcpy(dev_read, read, byte_length*sizeof(char), cudaMemcpyHostToDevice);
+    for(int i=1;i<byte_length;i++){
+		rotateRead_gpu_part1 <<<blocks, threads>>> (dev_read , i , (read[i-1] & 0x0F) << 4);        
+    }
+	prev_4bit = (read[byte_length-1] & 0x0F) << 4;
+	cudaMemcpy(read, dev_read, byte_length*sizeof(char) , cudaMemcpyDeviceToHost);
+	
+	//print_string_1d (read,byte_length);
+	read[0] = (read[0] >> 4) & 0x0F;
+    read[0]=read[0] | prev_4bit;
+	
+    char *rotated_read = (char*)malloc(byte_length*sizeof(char));
+	
+    for(int i=0;i<byte_length;i++){
+        rotated_read[i] = read[i];
+	}
+    return rotated_read;
+}
+/*
+char* rotateRead_stu(char *read, int byte_length){
+	
+    char prev_4bit = (read[0] & 0x0F) << 4;
+    read[0] = (read[0] >> 4) & 0x0F;
+    for(int i=1;i<byte_length;i++){
+        char this_char = ((read[i] >> 4) & 0x0F) | prev_4bit;
+        prev_4bit = (read[i] & 0x0F) << 4;
+        read[i] = this_char;
+    }
+    read[0]=read[0] | prev_4bit;
+    char *rotated_read = (char*)malloc(byte_length*sizeof(char));
+    for(int i=0;i<byte_length;i++)
+        rotated_read[i] = read[i];
+    return rotated_read;
+}*/
+//Generate Sufixes for a 4-bit encoded read
+char** generateSuffixes_stu(char *read, int byte_length){
+	
+	fourbitEncodeRead_stu(read, read_length);
+	
+    char **suffixes=(char**)malloc(byte_length*2*sizeof(char*));
+    for(int i=0;i<byte_length*2;i++){
+        suffixes[i] = rotateRead_stu(read, byte_length);
+    }
+    return suffixes;
+}
+
 
 
 __global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value, int read_length, int read_count){
-    //printf("gfdgfdgdsfg\n");
+    //printf(">>> bitonic_sort_step\n");
     int flag = 0;
+	int HIGH = 0;
 	unsigned int i, ixj; /* Sorting partners: i and ixj */
     i = threadIdx.x + blockDim.x * blockIdx.x;
     ixj = i^j;
     char temp_char_i,temp_char_ixj;
-	printf("input string = %s\n",dev_values);
+	//printf("input string = %s\n",dev_values);
     /* The threads with the lowest ids sort the array. */
     flag = 0;
     if ((ixj)>i) {
         for(int l=0;l<read_length;l++){
-			printf("lower char for i = %c\n",dev_values[i*read_length/2+l]&(0xF));
-			printf("higher char for i = %c\n",(dev_values[i*read_length/2+l]&(0xF0))>>4);
+			/*if(l==3){
+			printf("higher char for i = %d, dev_values = %x\n",  i, dev_values[i*read_length/2+l/2]&(0xF));
+			printf("lower char for i = %d, dev_values = %x\n", i, (dev_values[i*read_length/2+l/2]&(0xF0))>>4);
 			
-			printf("lower char for ixj = %c\n",dev_values[ixj*read_length/2+l]&(0xF));
-			printf("higher char for ixj = %c\n",(dev_values[ixj*read_length/2+l]&(0xF0))>>4);
-			
-			if(i%2==0) temp_char_i = dev_values[i*read_length/2+l]&(0xF);
-			else if(i%2==1) temp_char_i = dev_values[i*read_length/2+l]>>4;
-			if(ixj%2==0) temp_char_ixj = dev_values[ixj*read_length/2+l]&(0xF);
-			else if(ixj%2==1) temp_char_ixj = dev_values[ixj*read_length/2+l]>>4;
-            printf("compare data:\n%d\t%c\n%d\t%c\n",i,temp_char_i,ixj,temp_char_ixj);
+			printf("higher char for ixj = %d, dev_values = %x\n", ixj,  dev_values[ixj*read_length/2+l/2]&(0xF));
+			printf("lower char for ixj = %d, dev_values = %x\n", ixj, (dev_values[ixj*read_length/2+l/2]&(0xF0))>>4);
+			}*/
+			if (HIGH)        temp_char_i   = dev_values[i*read_length/2+l/2]&(0xF);
+			else if(!HIGH)    temp_char_i   = (dev_values[i*read_length/2+l/2]&(0xF0))>>4;
+			if (HIGH)      temp_char_ixj = dev_values[ixj*read_length/2+l/2]&(0xF);
+			else if (!HIGH) temp_char_ixj = (dev_values[ixj*read_length/2+l/2]&(0xF0))>>4;
+			//printf("compare data:\n%d\t%c\n%d\t%c\n",i,temp_char_i,ixj,temp_char_ixj);
 			if(temp_char_i>temp_char_ixj){
                 //if(i==0&&i*read_length+l==fir*65 && ixj*read_length+l==sec*65)printf(">>>>>>>>>>>>>>>>>>\n");
+				//printf("larger\nixj = %d, dev_values = %x\ni = %d, dev_values = %x\n", ixj,  temp_char_ixj,i, temp_char_i);
+				//printf("i = %d, dev_values = %x\n", i, temp_char_i);				
 				flag = 1;
                 break;
             }
             else if(temp_char_i<temp_char_ixj){
                 //if(i==0&&i*read_length+l==fir*65 && ixj*read_length+l==sec*65)printf("<<<<<<<<<<<<<<<<<<<<\n");
+				//printf("smaller\nixj = %d, dev_values = %x\ni = %d, dev_values = %x\n", ixj,  temp_char_ixj,i, temp_char_i);
                 flag = -1;
                 break;
             }
             //if(i==0&&i*read_length+l==fir*65 && ixj*read_length+l==sec*65)printf("=========================\n");
-            flag = 0;
+            HIGH = !HIGH;
+			flag = 0;
 
         }
         //printf("i=%d, ixj=%d, sorting result flag = %d\n",i,ixj,flag);
@@ -146,43 +258,55 @@ void bitonic_sort(char **values){
     size_t size = read_length/2 * sizeof(char);
     char *temp;
     char *temp_char = new char[read_length/2];
+
+	//printf(">>> bitonic_sort\n");
+	//printf("read_length = %d\n", read_length);
+	//printf("read_count  = %d\n", read_count);
+	
     temp = (char*)malloc(num_value*size);
     for(int i=0;i<read_length/2;i++){
         temp_char[i]=0x44;
     }
-    for(int i=0;i<num_value;i++){
-        if(i<read_length*read_count){
-            memcpy(&temp[i*read_length/2],values[i],size);
+	//printf("000\n");
+	//printf("num_value = %d\n", num_value);
+    for (int i = 0; i < num_value; i++){
+        if (i < read_length * read_count){
+            memcpy(&temp[i*read_length/2], values[i], size);
         }
         else{
-            memcpy(&temp[i*read_length/2],temp_char,size);
+            memcpy(&temp[i*read_length/2], temp_char , 	size);
         }
     }
+	//printf("001\n");
     cudaMalloc((void**) &dev_values, size*num_value);
 
     cudaMemcpy(dev_values, temp, num_value*size, cudaMemcpyHostToDevice);
-
+	//cout<<"================debug======================"<<endl;
+	//print_string_1d(temp,read_length);
     dim3 blocks(BLOCKS,1);    /* Number of blocks   */
     dim3 threads(THREADS,1);  /* Number of threads  */
-	cout<<"=========== before temp ==========="<<endl;
-	print_string_1d (temp,read_length*read_count);
-	cout<<"=========== after temp ==========="<<endl;
+	//cout<<"=========== before temp ==========="<<endl;
+	//print_string_1d (temp,read_length);
+	//cout<<"=========== after temp ==========="<<endl;
     int j, k;
     /* Major step */
-
-    for (k = 2; k <= 2; k <<= 1) {
+    
+    for (k = 2; k <= num_value; k <<= 1) {
         //* Minor step */
         for (j=k>>1; j>0; j=j>>1) {
 			bitonic_sort_step<<<blocks, threads>>>(dev_values, j, k, num_value,read_length, read_count);
+			//bitonic_sort_step<<<blocks, threads>>>(dev_values, j, k, num_value,read_length, 1);
 		}
     }
 	
     cudaMemcpy(temp, dev_values, read_length*read_count*size, cudaMemcpyDeviceToHost);
+    //cudaMemcpy(temp, dev_values, read_length*1*size, cudaMemcpyDeviceToHost);
 	
-	 for(int i=0;i<read_length*read_count;i++){
-
+	for(int i=0;i<read_length*read_count;i++){
+	//for(int i=0;i<read_length*1;i++){
+    
         memcpy(values[i],&temp[i*read_length/2],read_length/2*sizeof(char));
-
+    
     }  
 	
 	
@@ -194,7 +318,7 @@ void bitonic_sort(char **values){
             memcpy(temp_char,&temp[i*read_length],read_length*sizeof(char));
         }
     }	*/
-	print_string_2d(values, read_length);
+	print_string_2d(values, read_length,read_count);
     //cout<<"begin teeeeeeeeeeeeeeeeeeeeeeeeeeeeeemp"<<endl;
 
 
@@ -204,7 +328,8 @@ void bitonic_sort(char **values){
 
 
 void pipeline_stu(char **reads, int read_length, int read_count){
-	int temp_stu = ceil(log2((float)read_length));
+	int temp_stu = ceil(log2((float)read_length*read_count));
+	
 	num_value = pow(2,temp_stu);
 	if(num_value<=256){
 		THREADS = num_value;
@@ -215,21 +340,21 @@ void pipeline_stu(char **reads, int read_length, int read_count){
 		BLOCKS = num_value/THREADS;
 	}
     fourbit_sorted_suffixes_student = (char**)malloc(read_length*read_count*sizeof(char*));
+	
     for(int i=0;i<read_count;i++){
-        char **suffixes_for_read = generateSuffixes(fourbitEncodeRead(reads[i], read_length), read_length/2);
-		cout << "read_length = " << read_length << endl;
-		for(int z = 0; z < read_length ; z++){
-			//char temp = (z%2==0)?(*suffixes_for_read[z]&0x0f):(*suffixes_for_read[z]&0xf0);
-		}
-		print_string_2d(suffixes_for_read, read_length);
-		bitonic_sort(suffixes_for_read);
-			//cout<<**suffixes_for_read <<endl;
-        //sort_fourbit_suffixes(suffixes_for_read, read_length, read_length/2);
+        char **suffixes_for_read = generateSuffixes_stu(fourbitEncodeRead(reads[i], read_length), read_length/2);
+		//cout << "read_length = " << read_length << endl;
+		
+		//bitonic_sort(suffixes_for_read);
+		
         for(int j=0;j<read_length;j++){
             fourbit_sorted_suffixes_student[i*read_length+j] = suffixes_for_read[j];
         }
     }
-	
+	cout<<"=========== before bitonic_sort ==========="<<endl;
+	print_string_2d(fourbit_sorted_suffixes_student, read_length,read_count);
+	cout<<"=========== into bitonic_sort ==========="<<endl;
+	bitonic_sort(fourbit_sorted_suffixes_student);
 	
 
     //--------------For debug purpose--------------
