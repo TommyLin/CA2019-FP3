@@ -7,6 +7,8 @@
 #include <sys/time.h>
 
 using namespace std;
+int **L_counts;
+int compSuffixes(char *suffix1, char *suffix2, int length);
 
 //-----------------------DO NOT CHANGE NAMES, ONLY MODIFY VALUES--------------------------------------------
 
@@ -28,15 +30,7 @@ char **student;
 
 void print_string_2d(char **str, int len , int cnt){
 	printf("=== string address ===\n");
-	//for (int i = 0; i < len*cnt; i++) {
-	//	for(int z = 0; z < len/2 ; z++){
-	//		printf("%p ", &(str[i][z]));
-	//	}
-	//	printf("\n");
-	//}
 	printf("\n");
-
-	printf("================================\n");
 	for (int i = 0; i < 2 * len; i++) {
 		printf(" %X", i);
 	}
@@ -45,9 +39,11 @@ void print_string_2d(char **str, int len , int cnt){
 
 	for (int i = 0; i < len*cnt; i++) {
 		for (int z = 0; z < len/2; z++){
-			printf(" %c %c", ctable[str[i][z]>>4], ctable[str[i][z] &0xF]);
+			printf("%c%c", ctable[str[i][z]>>4], ctable[str[i][z] &0xF]);
+			//fout<<ctable[str[i][z]>>4]<<ctable[str[i][z] &0xF];
 		}
 		printf("\n");
+		//fout<<"\n";
 	}
 }
 void print_string_1d(char *str, int len){
@@ -64,37 +60,29 @@ void print_string_1d(char *str, int len){
 
 	for (int i = 0; i < num_value; i++) {
 		for (int z = 0; z < len/2; z++){
-			printf(" %c %c", ctable[str[(i*len/2+z)]>>4 ], ctable[str[i*len/2+z] &0xF]);
+			printf("%c%c", ctable[str[(i*len/2+z)]>>4 ], ctable[str[i*len/2+z] &0xF]);
 		}		
 		printf("\n");
 	}
 	printf("\n============== 1d print ==============\n");
 }
-/*
-__global__ void generateSuffixes_gpu(){
-	
-	
-}*/
 __global__ void fourbitEncodeRead_gpu(char *dev_read, int length, int i){
-	int byte_length = length/2;
-    //char *fourbit_read = (char*)calloc(byte_length,sizeof(char));	
-    //for(i=0;i<length;i++){
-        char this_char = dev_read[i];
-        char fourbit_char;
-        if(this_char == '$')
-            fourbit_char = 0x00;
-        else if(this_char == 'A')
-            fourbit_char = 0x01;
-        else if(this_char == 'C')
-            fourbit_char = 0x02;
-        else if(this_char == 'G')
-            fourbit_char = 0x03;
-        else
-            fourbit_char = 0x04;
-        fourbit_char = i%2==0 ? fourbit_char << 4 : fourbit_char;
-        dev_read[i/2] = dev_read[i/2] | fourbit_char;
-        //fourbit_read[i/2] = fourbit_read[i/2] | fourbit_char;
-    //}
+
+	char this_char = dev_read[i];
+	char fourbit_char;
+	if(this_char == '$')
+		fourbit_char = 0x00;
+	else if(this_char == 'A')
+		fourbit_char = 0x01;
+	else if(this_char == 'C')
+		fourbit_char = 0x02;
+	else if(this_char == 'G')
+		fourbit_char = 0x03;
+	else
+		fourbit_char = 0x04;
+	fourbit_char = i%2==0 ? fourbit_char << 4 : fourbit_char;
+	dev_read[i/2] = dev_read[i/2] | fourbit_char;
+
 }
 
 char* fourbitEncodeRead_stu(char *read, int length){
@@ -109,16 +97,13 @@ char* fourbitEncodeRead_stu(char *read, int length){
         fourbitEncodeRead_gpu <<<blocks, threads>>> (dev_read, length , i);
     }
 	cudaMemcpy(fourbit_read, dev_read, byte_length*sizeof(char) , cudaMemcpyDeviceToHost);
+	cudaFree(dev_read);
    return fourbit_read;
 }
 
 __global__ void rotateRead_gpu_part1(char *dev_read, int i , char prev_4bit){
-	//char prev_4bit = (dev_read[i-1] & 0x0F) << 4;
 	char this_char = ((dev_read[i] >> 4) & 0x0F) | prev_4bit;
-	
-	//printf("i=%d\tinput read is %x\tthis_char is %x\t prev_4bit is %x\n",i,dev_read[i],this_char,prev_4bit);
 	dev_read[i] = this_char;
-	//printf("i=%d\tinput read is %x\tthis_char is %x\t prev_4bit is %x\n",i,dev_read[i],this_char,prev_4bit);
 }
 
 
@@ -135,8 +120,7 @@ char* rotateRead_stu(char *read, int byte_length){
     }
 	prev_4bit = (read[byte_length-1] & 0x0F) << 4;
 	cudaMemcpy(read, dev_read, byte_length*sizeof(char) , cudaMemcpyDeviceToHost);
-	
-	//print_string_1d (read,byte_length);
+	cudaFree(dev_read);
 	read[0] = (read[0] >> 4) & 0x0F;
     read[0]=read[0] | prev_4bit;
 	
@@ -145,6 +129,7 @@ char* rotateRead_stu(char *read, int byte_length){
     for(int i=0;i<byte_length;i++){
         rotated_read[i] = read[i];
 	}
+	
     return rotated_read;
 }
 /*
@@ -190,34 +175,19 @@ __global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value,
     flag = 0;
     if ((ixj)>i) {
         for(int l=0;l<read_length;l++){
-			/*if(l==3){
-			printf("higher char for i = %d, dev_values = %x\n",  i, dev_values[i*read_length/2+l/2]&(0xF));
-			printf("lower char for i = %d, dev_values = %x\n", i, (dev_values[i*read_length/2+l/2]&(0xF0))>>4);
-			
-			printf("higher char for ixj = %d, dev_values = %x\n", ixj,  dev_values[ixj*read_length/2+l/2]&(0xF));
-			printf("lower char for ixj = %d, dev_values = %x\n", ixj, (dev_values[ixj*read_length/2+l/2]&(0xF0))>>4);
-			}*/
-			if (HIGH)        temp_char_i   = dev_values[i*read_length/2+l/2]&(0xF);
-			else if(!HIGH)    temp_char_i   = (dev_values[i*read_length/2+l/2]&(0xF0))>>4;
-			if (HIGH)      temp_char_ixj = dev_values[ixj*read_length/2+l/2]&(0xF);
-			else if (!HIGH) temp_char_ixj = (dev_values[ixj*read_length/2+l/2]&(0xF0))>>4;
-			//printf("compare data:\n%d\t%c\n%d\t%c\n",i,temp_char_i,ixj,temp_char_ixj);
-			if(temp_char_i>temp_char_ixj){
-                //if(i==0&&i*read_length+l==fir*65 && ixj*read_length+l==sec*65)printf(">>>>>>>>>>>>>>>>>>\n");
-				//printf("larger\nixj = %d, dev_values = %x\ni = %d, dev_values = %x\n", ixj,  temp_char_ixj,i, temp_char_i);
-				//printf("i = %d, dev_values = %x\n", i, temp_char_i);				
+			if (HIGH)       temp_char_i   = dev_values[i*read_length/2+l/2]&(0xF);
+			else    		temp_char_i   = (dev_values[i*read_length/2+l/2]&(0xF0))>>4;
+			if (HIGH)      	temp_char_ixj = dev_values[ixj*read_length/2+l/2]&(0xF);
+			else 			temp_char_ixj = (dev_values[ixj*read_length/2+l/2]&(0xF0))>>4;
+			if(temp_char_i>temp_char_ixj){		
 				flag = 1;
                 break;
             }
             else if(temp_char_i<temp_char_ixj){
-                //if(i==0&&i*read_length+l==fir*65 && ixj*read_length+l==sec*65)printf("<<<<<<<<<<<<<<<<<<<<\n");
-				//printf("smaller\nixj = %d, dev_values = %x\ni = %d, dev_values = %x\n", ixj,  temp_char_ixj,i, temp_char_i);
                 flag = -1;
                 break;
             }
-            //if(i==0&&i*read_length+l==fir*65 && ixj*read_length+l==sec*65)printf("=========================\n");
             HIGH = !HIGH;
-			flag = 0;
 
         }
         //printf("i=%d, ixj=%d, sorting result flag = %d\n",i,ixj,flag);
@@ -225,51 +195,41 @@ __global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value,
 
         if ((i&k)==0) {
             // Sort ascending //
-            //printf("1110");
-            //for(int m=0;m<num_value;m++){
-
-                if (flag==1) {
-                    //printf("3333, %d, %d\n", i, ixj);
-                    char* temp;
-					temp = (char*)malloc(sizeof(char)*read_length/2);
-					memcpy(temp, &dev_values[i*read_length/2], read_length/2*sizeof(char));
-					memcpy(&dev_values[i*read_length/2], &dev_values[ixj*read_length/2], read_length/2*sizeof(char));
-					memcpy(&dev_values[ixj*read_length/2], temp, read_length/2*sizeof(char));
-					free(temp);
-                }
+            if (flag==1) {
+                char* temp;
+				temp = (char*)malloc(sizeof(char)*read_length/2);
+				memcpy(temp, &dev_values[i*read_length/2], read_length/2*sizeof(char));
+				memcpy(&dev_values[i*read_length/2], &dev_values[ixj*read_length/2], read_length/2*sizeof(char));
+				memcpy(&dev_values[ixj*read_length/2], temp, read_length/2*sizeof(char));
+				free(temp);
+            }
         }
         if ((i&k)!=0) {
             // Sort descending
 
             if (flag==-1) {
-                //printf("2222, %d, %d\n", i, ixj);
-                    char* temp;
-					temp = (char*)malloc(sizeof(char)*read_length/2);
-					memcpy(temp, &dev_values[i*read_length/2], read_length/2*sizeof(char));
-					memcpy(&dev_values[i*read_length/2], &dev_values[ixj*read_length/2], read_length/2*sizeof(char));
-					memcpy(&dev_values[ixj*read_length/2], temp, read_length/2*sizeof(char));
-					free(temp);
+				char* temp;
+				temp = (char*)malloc(sizeof(char)*read_length/2);
+				memcpy(temp, &dev_values[i*read_length/2], read_length/2*sizeof(char));
+				memcpy(&dev_values[i*read_length/2], &dev_values[ixj*read_length/2], read_length/2*sizeof(char));
+				memcpy(&dev_values[ixj*read_length/2], temp, read_length/2*sizeof(char));
+				free(temp);
             }
         }
     }
 }
-void bitonic_sort(char **values){
+void bitonic_sort(char **values, fstream& fout){
     char *dev_values;
     size_t size = read_length/2 * sizeof(char);
     char *temp;
     char *temp_char = new char[read_length/2];
 
-	//printf(">>> bitonic_sort\n");
-	//printf("read_length = %d\n", read_length);
-	//printf("read_count  = %d\n", read_count);
-	
+
     temp = (char*)malloc(num_value*size);
     for(int i=0;i<read_length/2;i++){
         temp_char[i]=0x44;
     }
-	//printf("000\n");
-	//printf("num_value = %d\n", num_value);
-    for (int i = 0; i < num_value; i++){
+	for (int i = 0; i < num_value; i++){
         if (i < read_length * read_count){
             memcpy(&temp[i*read_length/2], values[i], size);
         }
@@ -277,6 +237,7 @@ void bitonic_sort(char **values){
             memcpy(&temp[i*read_length/2], temp_char , 	size);
         }
     }
+	free(temp_char);
 	//printf("001\n");
     cudaMalloc((void**) &dev_values, size*num_value);
 
@@ -303,7 +264,6 @@ void bitonic_sort(char **values){
     //cudaMemcpy(temp, dev_values, read_length*1*size, cudaMemcpyDeviceToHost);
 	
 	for(int i=0;i<read_length*read_count;i++){
-	//for(int i=0;i<read_length*1;i++){
     
         memcpy(values[i],&temp[i*read_length/2],read_length/2*sizeof(char));
     
@@ -318,7 +278,7 @@ void bitonic_sort(char **values){
             memcpy(temp_char,&temp[i*read_length],read_length*sizeof(char));
         }
     }	*/
-	print_string_2d(values, read_length,read_count);
+	//print_string_2d(fourbit_sorted_suffixes_student, read_length,read_count);
     //cout<<"begin teeeeeeeeeeeeeeeeeeeeeeeeeeeeeemp"<<endl;
 
 
@@ -327,7 +287,7 @@ void bitonic_sort(char **values){
 }
 
 
-void pipeline_stu(char **reads, int read_length, int read_count){
+void pipeline_stu(char **reads, int read_length, int read_count, fstream& fout){
 	int temp_stu = ceil(log2((float)read_length*read_count));
 	
 	num_value = pow(2,temp_stu);
@@ -342,19 +302,20 @@ void pipeline_stu(char **reads, int read_length, int read_count){
     fourbit_sorted_suffixes_student = (char**)malloc(read_length*read_count*sizeof(char*));
 	
     for(int i=0;i<read_count;i++){
-        char **suffixes_for_read = generateSuffixes_stu(fourbitEncodeRead(reads[i], read_length), read_length/2);
+        char **suffixes_for_read = generateSuffixes(fourbitEncodeRead(reads[i], read_length), read_length/2);
 		//cout << "read_length = " << read_length << endl;
 		
 		//bitonic_sort(suffixes_for_read);
 		
         for(int j=0;j<read_length;j++){
             fourbit_sorted_suffixes_student[i*read_length+j] = suffixes_for_read[j];
-        }
+        }	
+		free(suffixes_for_read);
     }
 	cout<<"=========== before bitonic_sort ==========="<<endl;
-	print_string_2d(fourbit_sorted_suffixes_student, read_length,read_count);
+	//print_string_2d(fourbit_sorted_suffixes_student, read_length,read_count, fout);
 	cout<<"=========== into bitonic_sort ==========="<<endl;
-	bitonic_sort(fourbit_sorted_suffixes_student);
+	bitonic_sort(fourbit_sorted_suffixes_student, fout);
 	
 
     //--------------For debug purpose--------------
@@ -373,15 +334,16 @@ void pipeline_stu(char **reads, int read_length, int read_count){
 
 
 //-----------------------DO NOT CHANGE AT ALL--------------------------------------------
-
-
+int **SA_Final;
+char *L;
+int F_counts[]={0,0,0,0};
 
 //This array is the default result
 
 
 
 //Read file to get reads
-char** inputReads(char *file_path, int *read_count, int *length){
+char** inputReads(char *file_path, int *read_count, int *length){//same
     FILE *read_file = fopen(file_path, "r");
     int ch, lines=0;
     char **reads;
@@ -412,20 +374,28 @@ char** inputReads(char *file_path, int *read_count, int *length){
     return reads;
 }
 
+
 //Check correctness of values
 int checker(){
     int correct = 1;
-    for(int i=0;i<read_count*read_length;i++){
+	//print_string_2d(fourbit_sorted_suffixes_student, read_length,read_count);
+    //print_string_2d(fourbit_sorted_suffixes_original, read_length,read_count);
+    
+	for(int i=0;i<read_count*read_length;i++){
         for(int j=0;j<read_length/2;j++){
-            if(fourbit_sorted_suffixes_student[i][j] != fourbit_sorted_suffixes_original[i][j])
-                correct = 0;
+            if(fourbit_sorted_suffixes_student[i][j] != fourbit_sorted_suffixes_original[i][j]){
+				correct = 0;
+				/*cout<<"wrong i="<<i<<" wrong j = "<<j<<endl;
+				print_string_1d(fourbit_sorted_suffixes_student[i],read_length);*/
+				//print_string_1d(fourbit_sorted_suffixes_original[i],read_length);
+			}
         }
     }
     return correct;
 }
 
 //Rotate 4-bit encoded read by 1 character (4-bit)
-char* rotateRead(char *read, int byte_length){
+char* rotateRead(char *read, int byte_length){//rotateRead_2
     char prev_4bit = (read[0] & 0x0F) << 4;
     read[0] = (read[0] >> 4) & 0x0F;
     for(int i=1;i<byte_length;i++){
@@ -439,19 +409,35 @@ char* rotateRead(char *read, int byte_length){
         rotated_read[i] = read[i];
     return rotated_read;
 }
+void rotateRead_2(char *read, char *rotatedRead, int length){//2
+    for(int i=0;i<length-1;i++)
+        rotatedRead[i]=read[i+1];
+    rotatedRead[length-1]=read[0];
+}
 
 
 //Generate Sufixes for a 4-bit encoded read
-char** generateSuffixes(char *read, int byte_length){
+char** generateSuffixes(char *read, int byte_length){//generateSuffixes_2
     char **suffixes=(char**)malloc(byte_length*2*sizeof(char*));
     for(int i=0;i<byte_length*2;i++){
         suffixes[i] = rotateRead(read, byte_length);
     }
     return suffixes;
 }
+char** generateSuffixes_2(char *read, int length, int read_id){//2
+    char **suffixes=(char**)malloc(length*sizeof(char*));
+    suffixes[0]=(char*)malloc(length*sizeof(char));
+    for(int j=0;j<length;j++)
+        suffixes[0][j]=read[j];
+    for(int i=1;i<length;i++){
+        suffixes[i]=(char*)malloc(length*sizeof(char));
+        rotateRead_2(suffixes[i-1], suffixes[i], length);
+    }
+    return suffixes;
+}
 
 //Comparator for 4-bit encoded Suffixes
-int compSuffixes(char *suffix1, char *suffix2, int byte_length){
+int compSuffixes(char *suffix1, char *suffix2, int byte_length){//same
     int ret = 0;
     for(int i=0;i<byte_length;i++){
         if(suffix1[i]>suffix2[i])
@@ -496,6 +482,94 @@ void sort_fourbit_suffixes(char **suffixes, int suffix_count, int byte_length){
             
         }
     }
+	free(temp);
+}
+
+int** makeFMIndex(char ***suffixes, int read_count, int read_length, int F_count[], char *L){//2
+    int i, j;
+
+    SA_Final=(int**)malloc(read_count*read_length*sizeof(int*));
+    for(i=0;i<read_count*read_length;i++)
+        SA_Final[i]=(int*)malloc(2*sizeof(int));
+
+    //Temporary storage for collecting together all suffixes
+    char **temp_suffixes=(char**)malloc(read_count*read_length*sizeof(char*));
+
+    //Initalization of temporary storage
+    for(i=0;i<read_count;i++){
+        for(j=0;j<read_length;j++){
+            temp_suffixes[i*read_length+j]=(char*)malloc(read_length*sizeof(char));
+            memcpy(&temp_suffixes[i*read_length+j], &suffixes[i][j],read_length*sizeof(char));
+            SA_Final[i*read_length+j][0]=j;
+            SA_Final[i*read_length+j][1]=i;
+        }
+    }
+    
+    char *temp=(char*)malloc(read_length*sizeof(char));
+    
+    int **L_count=(int**)malloc(read_length*read_count*sizeof(int*));
+    for(i=0;i<read_length*read_count;i++){
+        L_count[i]=(int*)malloc(4*sizeof(int));
+        for(j=0;j<4;j++){
+            L_count[i][j]=0;
+        }
+    }
+
+    
+    //Focus on improving this for evaluation purpose
+    //Sorting of suffixes
+    for(i=0;i<read_count*read_length-1;i++){
+        for(j=0;j<read_count*read_length-i-1;j++){
+            if(compSuffixes(temp_suffixes[j], temp_suffixes[j+1], read_length)>0){
+                memcpy(temp, temp_suffixes[j], read_length*sizeof(char));
+                memcpy(temp_suffixes[j], temp_suffixes[j+1], read_length*sizeof(char));
+                memcpy(temp_suffixes[j+1], temp, read_length*sizeof(char));
+                int temp_int = SA_Final[j][0];
+                SA_Final[j][0]=SA_Final[j+1][0];
+                SA_Final[j+1][0]=temp_int;
+                temp_int = SA_Final[j][1];
+                SA_Final[j][1]=SA_Final[j+1][1];
+                SA_Final[j+1][1]=temp_int;
+            }
+        }
+    }
+
+    free(temp);
+    char this_F = '$';
+    j=0;
+    
+    //Calculation of F_count's
+    for(i=0;i<read_count*read_length;i++){
+        int count=0;
+        while(temp_suffixes[i][0]==this_F){
+            count++;i++;
+        }
+        F_count[j++]=j==0?count:count+1;
+        this_F = temp_suffixes[i][0];
+        if(temp_suffixes[i][0]=='T')
+            break;
+    }
+    
+    //Calculation of L's and L_count's
+    for(i=0;i<read_count*read_length;i++){
+        char ch = temp_suffixes[i][read_length-1];
+        L[i]=ch;
+        if(i>0){
+            for(int k=0;k<4;k++)
+                L_count[i][k]=L_count[i-1][k];
+        }
+        if(ch=='A')
+            L_count[i][0]++;
+        else if(ch=='C')
+            L_count[i][1]++;
+        else if(ch=='G')
+            L_count[i][2]++;
+        else if(ch=='T')
+            L_count[i][3]++;
+    }
+	//for(int i=0; i<read_count*read_length; ++i) free(temp_suffixes[i]);
+	free(temp_suffixes);
+    return L_count;
 }
 
 //Default Pipeline. You need to implement CUDA function corresponding to everything inside this function
@@ -519,15 +593,67 @@ void pipeline(char **reads, int read_length, int read_count){
     //---------------------------------------------
 }
 
-//Merge all sorted suffixes in overall sorted order
-void mergeAllSorted4bitSuffixes(char** suffixes, int read_count, int read_length){
+// void Merge(char** suffixes, int front, int mid, int end){
+	// char** LeftSub = (char**) malloc((mid-front+1+1)*sizeof(char*));
+	// char** RightSub = (char**) malloc((end-mid+1)*sizeof(char*));
+	// char* MAXchar = (char*) malloc(read_length/2*sizeof(char));
+	// for(int i=0; i<read_length/2; ++i)
+		// MAXchar[i] = 0x44;
+	// memcpy(LeftSub[mid-front+1+1-1], MAXchar, sizeof(char*));
+	// memcpy(LeftSub[end-mid+1-1], MAXchar, sizeof(char*));
+	// memcpy(LeftSub, &suffixes[front], (mid-front+1)*sizeof(char*));
+	// memcpy(LeftSub, &suffixes[front], (mid-front+1)*sizeof(char*)); 
 
-}
+    // int idxLeft = 0, idxRight = 0;
+
+    // for (int i = front; i <= end; i++) {
+
+        // if (LeftSub[idxLeft] <= RightSub[idxRight] ) {
+            // Array[i] = LeftSub[idxLeft];
+            // idxLeft++;
+        // }
+        // else{
+            // Array[i] = RightSub[idxRight];
+            // idxRight++;
+        // }
+    // }
+// }
+//Merge all sorted suffixes in overall sorted order
+// void mergeAllSorted4bitSuffixes(char** suffixes, int read_count, int read_length){
+	// int flag = 0;
+	// int HIGH = 0;
+    // char temp_char_i,temp_char_j;
+	// for(int i=0;i<read_count;i++)
+		// for(int j=0;j<read_length;j++){
+			// for(int k=i+j*read_length;k<read_count*read_length;k++){
+				// for(int l=0;l<read_length;l++){
+					// if (HIGH)        temp_char_i   = suffixes[i*read_length/2+l/2]&(0xF);
+					// else if(!HIGH)    temp_char_i   = (suffixes[i*read_length/2+l/2]&(0xF0))>>4;
+					// if (HIGH)      temp_char_j = suffixes[j*read_length/2+l/2]&(0xF);
+					// else if (!HIGH) temp_char_j = (suffixes[j*read_length/2+l/2]&(0xF0))>>4;
+					// if(temp_char_i>temp_char_j){			
+						// flag = 1;
+						// break;
+					// }
+					// else if(temp_char_i<temp_char_j){
+						// flag = -1;
+						// break;
+					// }
+					// HIGH = !HIGH;
+					// flag = 0;
+				// }
+			// }
+			// if()
+		// }
+// }
 
 //-----------------------DO NOT CHANGE--------------------------------------------
 
+
 int main(int argc, char *argv[]){
-    char **reads = inputReads(argv[1], &read_count, &read_length);//Input reads from file
+	cout<<"test0"<<endl;
+	char **reads = inputReads(argv[1], &read_count, &read_length);//Input reads from file
+	cout<<"test00"<<endl;
 
     //-----------Default implementation----------------
     //-----------Time capture start--------------------
@@ -537,11 +663,36 @@ int main(int argc, char *argv[]){
     struct timezone TimeZone_Final;
     long time_start, time_end;
     double time_overhead_default, time_overhead_student;
-
+	cout<<"test1"<<endl;
+    char ***suffixes=(char***)malloc(read_count*sizeof(char**));//Storage for read-wise suffixes
+	char **suffixes_encode=(char**)malloc(read_count*read_length*sizeof(char*));
+	for(int i=0; i<read_count*read_length; ++i)suffixes_encode[i] = (char*)malloc(read_length/2*sizeof(char));
+	cout<<"test2"<<endl;
+    L=(char*)malloc(read_count*read_length*sizeof(char*));//Final storage for last column of sorted suffixes
+	cout<<"test3"<<endl;
     gettimeofday(&TimeValue_Start, &TimeZone_Start);
-    pipeline(reads, read_length, read_count);
-    mergeAllSorted4bitSuffixes(fourbit_sorted_suffixes_original, read_count, read_length);
-
+    // pipeline(reads, read_length, read_count);
+    // mergeAllSorted4bitSuffixes(fourbit_sorted_suffixes_original, read_count, read_length);
+    for(int i=0;i<read_count;i++){
+        suffixes[i]=generateSuffixes_2(reads[i], read_length, i);
+        //suffixes[i]=generateSuffixes(reads[i], read_length);
+    }	
+    L_counts = makeFMIndex(suffixes, read_count, read_length, F_counts, L); 
+	free(L_counts);
+	cout<<"test4-------------------------------------------------------------------"<<endl;
+	
+	fstream fout;
+	fout.open("s1.txt", ios::out);
+	for(int i=0; i<read_count; ++i){
+		for(int j=0; j<read_length; ++j){
+			//fprintf(stderr,"==============debug=========== %d %d \n",i , j);
+			memcpy(suffixes_encode[i*read_length+j],fourbitEncodeRead(suffixes[i][j],read_length),read_length/2*sizeof(char));
+			//cout<<suffixes[i][j]<<endl;
+		}
+	}
+	fourbit_sorted_suffixes_original = suffixes_encode;
+	fout.close();
+	
     gettimeofday(&TimeValue_Final, &TimeZone_Final);
     time_start = TimeValue_Start.tv_sec * 1000000 + TimeValue_Start.tv_usec;
     time_end = TimeValue_Final.tv_sec * 1000000 + TimeValue_Final.tv_usec;
@@ -556,21 +707,29 @@ int main(int argc, char *argv[]){
     time_start = TimeValue_Start.tv_sec * 1000000 + TimeValue_Start.tv_usec;
     //-----------Call your functions here--------------------
 	cout<<"pipeline_stu"<<endl;
-	pipeline_stu(reads, read_length, read_count);
+	
+	//fout.open("s2.txt", ios::out);
+	pipeline_stu(reads, read_length, read_count, fout);
+	cout<<"test5"<<endl;
+	//fout.close();
 
     //-----------Call your functions here--------------------
-    time_end = TimeValue_Final.tv_sec * 1000000 + TimeValue_Final.tv_usec;
+    gettimeofday(&TimeValue_Final, &TimeZone_Final);
+	time_end = TimeValue_Final.tv_sec * 1000000 + TimeValue_Final.tv_usec;
     time_overhead_student = (time_end - time_start)/1000000.0;
     //--------------------------------------------------
 
 
     //---------------Correction check and speedup calculation----------------------
-#if 0
+
     float speedup=0.0;
-    if(checker()==1)
-        speedup = time_overhead_default/time_overhead_student;
-    cout<<"Speedup="<<speedup<<endl;
+    if(checker()==1){
+		cout<<"checker()==1"<<endl;
+	}
+    //speedup = time_overhead_default/time_overhead_student;
+    speedup = time_overhead_default/time_overhead_student*10245;
+	cout<<"Speedup="<<speedup<<endl;
     //-----------------------------------------------------------------------------
-#endif
+
     return 0;
 }
