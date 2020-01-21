@@ -24,7 +24,7 @@ int BLOCKS, THREADS;
 char* fourbitEncodeRead(char *read, int length);
 char** generateSuffixes(char *read, int byte_length);
 char ctable[] = {'$', 'A', 'C', 'G', 'T', '5', '6', '7',
-	'8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+	             '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
 char **student;
 
@@ -175,15 +175,18 @@ __global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value,
     flag = 0;
     if ((ixj)>i) {
         for(int l=0;l<read_length;l++){
-			if (HIGH)       temp_char_i   = dev_values[i*read_length/2+l/2]&(0xF);
-			else    		temp_char_i   = (dev_values[i*read_length/2+l/2]&(0xF0))>>4;
-			if (HIGH)      	temp_char_ixj = dev_values[ixj*read_length/2+l/2]&(0xF);
-			else 			temp_char_ixj = (dev_values[ixj*read_length/2+l/2]&(0xF0))>>4;
-			if(temp_char_i>temp_char_ixj){
+			if (HIGH) {
+				temp_char_i   = dev_values[i  *read_length / 2 + l / 2] & (0xF);
+				temp_char_ixj = dev_values[ixj*read_length / 2 + l / 2] & (0xF);
+			} else {
+				temp_char_i   = (dev_values[i  *read_length / 2 + l / 2]& (0xF0)) >>4;
+				temp_char_ixj = (dev_values[ixj*read_length / 2 + l / 2]& (0xF0)) >>4;
+			}
+
+			if (temp_char_i>temp_char_ixj){
 				flag = 1;
                 break;
-            }
-            else if(temp_char_i<temp_char_ixj){
+            } else if(temp_char_i<temp_char_ixj){
                 flag = -1;
                 break;
             }
@@ -343,7 +346,7 @@ int F_counts[]={0,0,0,0};
 
 
 //Read file to get reads
-char** inputReads(char *file_path, int *read_count, int *length){//same
+char** inputReads(const char *file_path, int *read_count, int *length){//same
     FILE *read_file = fopen(file_path, "r");
     int ch, lines=0;
     char **reads;
@@ -734,7 +737,7 @@ int main(int argc, char *argv[]){
 		cout<<"checker()==1"<<endl;
 	}
     //speedup = time_overhead_default/time_overhead_student;
-    speedup = time_overhead_default/time_overhead_student*10245;
+    speedup = time_overhead_default/time_overhead_student;
 	cout<<"Speedup="<<speedup<<endl;
     //-----------------------------------------------------------------------------
 
