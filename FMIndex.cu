@@ -25,7 +25,7 @@ char* fourbitEncodeRead(char *read, int length);
 char** generateSuffixes(char *read, int byte_length);
 char ctable[] = {'$', 'A', 'C', 'G', 'T', '5', '6', '7',
 	'8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
-	
+
 char **student;
 
 void print_string_2d(char **str, int len , int cnt){
@@ -61,7 +61,7 @@ void print_string_1d(char *str, int len){
 	for (int i = 0; i < num_value; i++) {
 		for (int z = 0; z < len/2; z++){
 			printf("%c%c", ctable[str[(i*len/2+z)]>>4 ], ctable[str[i*len/2+z] &0xF]);
-		}		
+		}
 		printf("\n");
 	}
 	printf("\n============== 1d print ==============\n");
@@ -93,7 +93,7 @@ char* fourbitEncodeRead_stu(char *read, int length){
 	cudaMemcpy(dev_read, read, length*sizeof(char), cudaMemcpyHostToDevice);
 	dim3 blocks(BLOCKS,1);    /* Number of blocks   */
     dim3 threads(THREADS,1);  /* Number of threads  */
-    for(int i=0;i<length;i++){		
+    for(int i=0;i<length;i++){
         fourbitEncodeRead_gpu <<<blocks, threads>>> (dev_read, length , i);
     }
 	cudaMemcpy(fourbit_read, dev_read, byte_length*sizeof(char) , cudaMemcpyDeviceToHost);
@@ -108,33 +108,33 @@ __global__ void rotateRead_gpu_part1(char *dev_read, int i , char prev_4bit){
 
 
 char* rotateRead_stu(char *read, int byte_length){
-	
+
     char prev_4bit = (read[0] & 0x0F) << 4;
 	char *dev_read;
-	dim3 blocks(BLOCKS,1);    
-    dim3 threads(THREADS,1);  
+	dim3 blocks(BLOCKS,1);
+    dim3 threads(THREADS,1);
 	cudaMalloc((void**) &dev_read, byte_length*sizeof(char));
 	cudaMemcpy(dev_read, read, byte_length*sizeof(char), cudaMemcpyHostToDevice);
     for(int i=1;i<byte_length;i++){
-		rotateRead_gpu_part1 <<<blocks, threads>>> (dev_read , i , (read[i-1] & 0x0F) << 4);        
+		rotateRead_gpu_part1 <<<blocks, threads>>> (dev_read , i , (read[i-1] & 0x0F) << 4);
     }
 	prev_4bit = (read[byte_length-1] & 0x0F) << 4;
 	cudaMemcpy(read, dev_read, byte_length*sizeof(char) , cudaMemcpyDeviceToHost);
 	cudaFree(dev_read);
 	read[0] = (read[0] >> 4) & 0x0F;
     read[0]=read[0] | prev_4bit;
-	
+
     char *rotated_read = (char*)malloc(byte_length*sizeof(char));
-	
+
     for(int i=0;i<byte_length;i++){
         rotated_read[i] = read[i];
 	}
-	
+
     return rotated_read;
 }
 /*
 char* rotateRead_stu(char *read, int byte_length){
-	
+
     char prev_4bit = (read[0] & 0x0F) << 4;
     read[0] = (read[0] >> 4) & 0x0F;
     for(int i=1;i<byte_length;i++){
@@ -150,9 +150,9 @@ char* rotateRead_stu(char *read, int byte_length){
 }*/
 //Generate Sufixes for a 4-bit encoded read
 char** generateSuffixes_stu(char *read, int byte_length){
-	
+
 	fourbitEncodeRead_stu(read, read_length);
-	
+
     char **suffixes=(char**)malloc(byte_length*2*sizeof(char*));
     for(int i=0;i<byte_length*2;i++){
         suffixes[i] = rotateRead_stu(read, byte_length);
@@ -179,7 +179,7 @@ __global__ void bitonic_sort_step(char *dev_values, int j, int k, int num_value,
 			else    		temp_char_i   = (dev_values[i*read_length/2+l/2]&(0xF0))>>4;
 			if (HIGH)      	temp_char_ixj = dev_values[ixj*read_length/2+l/2]&(0xF);
 			else 			temp_char_ixj = (dev_values[ixj*read_length/2+l/2]&(0xF0))>>4;
-			if(temp_char_i>temp_char_ixj){		
+			if(temp_char_i>temp_char_ixj){
 				flag = 1;
                 break;
             }
@@ -251,7 +251,7 @@ void bitonic_sort(char **values, fstream& fout){
 	//cout<<"=========== after temp ==========="<<endl;
     int j, k;
     /* Major step */
-    
+
     for (k = 2; k <= num_value; k <<= 1) {
         //* Minor step */
         for (j=k>>1; j>0; j=j>>1) {
@@ -259,17 +259,17 @@ void bitonic_sort(char **values, fstream& fout){
 			//bitonic_sort_step<<<blocks, threads>>>(dev_values, j, k, num_value,read_length, 1);
 		}
     }
-	
+
     cudaMemcpy(temp, dev_values, read_length*read_count*size, cudaMemcpyDeviceToHost);
     //cudaMemcpy(temp, dev_values, read_length*1*size, cudaMemcpyDeviceToHost);
-	
+
 	for(int i=0;i<read_length*read_count;i++){
-    
+
         memcpy(values[i],&temp[i*read_length/2],read_length/2*sizeof(char));
-    
-    }  
-	
-	
+
+    }
+
+
     /*for(int i=0;i<num_value;i++){
         if(i<read_length*read_count){
             memcpy(values[i],&temp[i*read_length],read_length*sizeof(char));
@@ -289,7 +289,7 @@ void bitonic_sort(char **values, fstream& fout){
 
 void pipeline_stu(char **reads, int read_length, int read_count, fstream& fout){
 	int temp_stu = ceil(log2((float)read_length*read_count));
-	
+
 	num_value = pow(2,temp_stu);
 	if(num_value<=256){
 		THREADS = num_value;
@@ -300,23 +300,23 @@ void pipeline_stu(char **reads, int read_length, int read_count, fstream& fout){
 		BLOCKS = num_value/THREADS;
 	}
     fourbit_sorted_suffixes_student = (char**)malloc(read_length*read_count*sizeof(char*));
-	
+
     for(int i=0;i<read_count;i++){
         char **suffixes_for_read = generateSuffixes(fourbitEncodeRead(reads[i], read_length), read_length/2);
 		//cout << "read_length = " << read_length << endl;
-		
+
 		//bitonic_sort(suffixes_for_read);
-		
+
         for(int j=0;j<read_length;j++){
             fourbit_sorted_suffixes_student[i*read_length+j] = suffixes_for_read[j];
-        }	
+        }
 		free(suffixes_for_read);
     }
 	cout<<"=========== before bitonic_sort ==========="<<endl;
 	//print_string_2d(fourbit_sorted_suffixes_student, read_length,read_count, fout);
 	cout<<"=========== into bitonic_sort ==========="<<endl;
 	bitonic_sort(fourbit_sorted_suffixes_student, fout);
-	
+
 
     //--------------For debug purpose--------------
     /*
@@ -347,23 +347,23 @@ char** inputReads(char *file_path, int *read_count, int *length){//same
     FILE *read_file = fopen(file_path, "r");
     int ch, lines=0;
     char **reads;
-    do                                                                                                 
-    {                                                                                                  
-        ch = fgetc(read_file);                                                                            
-        if (ch == '\n')                                                                                
-            lines++;                                                                                   
+    do
+    {
+        ch = fgetc(read_file);
+        if (ch == '\n')
+            lines++;
     } while (ch != EOF);
     rewind(read_file);
     reads=(char**)malloc(lines*sizeof(char*));
     *read_count = lines;
-    int i = 0;                                                                                         
-    size_t len = 0;                                                                                    
-    for(i = 0; i < lines; i++)                                                                         
+    int i = 0;
+    size_t len = 0;
+    for(i = 0; i < lines; i++)
     {
         reads[i] = NULL;
-        len = 0;                                                                                
+        len = 0;
         getline(&reads[i], &len, read_file);
-    }                                                                                                  
+    }
     fclose(read_file);
     int j=0;
     while(reads[0][j]!='\n')
@@ -380,7 +380,7 @@ int checker(){
     int correct = 1;
 	//print_string_2d(fourbit_sorted_suffixes_student, read_length,read_count);
     //print_string_2d(fourbit_sorted_suffixes_original, read_length,read_count);
-    
+
 	for(int i=0;i<read_count*read_length;i++){
         for(int j=0;j<read_length/2;j++){
             if(fourbit_sorted_suffixes_student[i][j] != fourbit_sorted_suffixes_original[i][j]){
@@ -479,7 +479,6 @@ void sort_fourbit_suffixes(char **suffixes, int suffix_count, int byte_length){
                 memcpy(suffixes[j], suffixes[j+1], byte_length*sizeof(char));
                 memcpy(suffixes[j+1], temp, byte_length*sizeof(char));
             }
-            
         }
     }
 	free(temp);
@@ -504,9 +503,9 @@ int** makeFMIndex(char ***suffixes, int read_count, int read_length, int F_count
             SA_Final[i*read_length+j][1]=i;
         }
     }
-    
+
     char *temp=(char*)malloc(read_length*sizeof(char));
-    
+
     int **L_count=(int**)malloc(read_length*read_count*sizeof(int*));
     for(i=0;i<read_length*read_count;i++){
         L_count[i]=(int*)malloc(4*sizeof(int));
@@ -515,7 +514,7 @@ int** makeFMIndex(char ***suffixes, int read_count, int read_length, int F_count
         }
     }
 
-    
+
     //Focus on improving this for evaluation purpose
     //Sorting of suffixes
     for(i=0;i<read_count*read_length-1;i++){
@@ -537,7 +536,7 @@ int** makeFMIndex(char ***suffixes, int read_count, int read_length, int F_count
     free(temp);
     char this_F = '$';
     j=0;
-    
+
     //Calculation of F_count's
     for(i=0;i<read_count*read_length;i++){
         int count=0;
@@ -549,7 +548,7 @@ int** makeFMIndex(char ***suffixes, int read_count, int read_length, int F_count
         if(temp_suffixes[i][0]=='T')
             break;
     }
-    
+
     //Calculation of L's and L_count's
     for(i=0;i<read_count*read_length;i++){
         char ch = temp_suffixes[i][read_length-1];
@@ -602,7 +601,7 @@ void pipeline(char **reads, int read_length, int read_count){
 	// memcpy(LeftSub[mid-front+1+1-1], MAXchar, sizeof(char*));
 	// memcpy(LeftSub[end-mid+1-1], MAXchar, sizeof(char*));
 	// memcpy(LeftSub, &suffixes[front], (mid-front+1)*sizeof(char*));
-	// memcpy(LeftSub, &suffixes[front], (mid-front+1)*sizeof(char*)); 
+	// memcpy(LeftSub, &suffixes[front], (mid-front+1)*sizeof(char*));
 
     // int idxLeft = 0, idxRight = 0;
 
@@ -631,7 +630,7 @@ void pipeline(char **reads, int read_length, int read_count){
 					// else if(!HIGH)    temp_char_i   = (suffixes[i*read_length/2+l/2]&(0xF0))>>4;
 					// if (HIGH)      temp_char_j = suffixes[j*read_length/2+l/2]&(0xF);
 					// else if (!HIGH) temp_char_j = (suffixes[j*read_length/2+l/2]&(0xF0))>>4;
-					// if(temp_char_i>temp_char_j){			
+					// if(temp_char_i>temp_char_j){
 						// flag = 1;
 						// break;
 					// }
@@ -651,8 +650,16 @@ void pipeline(char **reads, int read_length, int read_count){
 
 
 int main(int argc, char *argv[]){
-	cout<<"test0"<<endl;
-	char **reads = inputReads(argv[1], &read_count, &read_length);//Input reads from file
+	char **reads;
+	cout << "argc\t= " << argc <<endl;
+	cout << "argv[0]\t= " << argv[0] <<endl;
+
+	if (argc > 1) {
+		cout << "argv[1]\t= " << argv[1] <<endl;
+		reads = inputReads(argv[1], &read_count, &read_length); // Input reads from file
+	} else
+		reads = inputReads("small.txt", &read_count, &read_length); // Input reads from default file "small.txt"
+
 	cout<<"test00"<<endl;
 
     //-----------Default implementation----------------
@@ -676,11 +683,11 @@ int main(int argc, char *argv[]){
     for(int i=0;i<read_count;i++){
         suffixes[i]=generateSuffixes_2(reads[i], read_length, i);
         //suffixes[i]=generateSuffixes(reads[i], read_length);
-    }	
-    L_counts = makeFMIndex(suffixes, read_count, read_length, F_counts, L); 
+    }
+    L_counts = makeFMIndex(suffixes, read_count, read_length, F_counts, L);
 	free(L_counts);
 	cout<<"test4-------------------------------------------------------------------"<<endl;
-	
+
 	fstream fout;
 	fout.open("s1.txt", ios::out);
 	for(int i=0; i<read_count; ++i){
@@ -692,7 +699,7 @@ int main(int argc, char *argv[]){
 	}
 	fourbit_sorted_suffixes_original = suffixes_encode;
 	fout.close();
-	
+
     gettimeofday(&TimeValue_Final, &TimeZone_Final);
     time_start = TimeValue_Start.tv_sec * 1000000 + TimeValue_Start.tv_usec;
     time_end = TimeValue_Final.tv_sec * 1000000 + TimeValue_Final.tv_usec;
@@ -707,7 +714,7 @@ int main(int argc, char *argv[]){
     time_start = TimeValue_Start.tv_sec * 1000000 + TimeValue_Start.tv_usec;
     //-----------Call your functions here--------------------
 	cout<<"pipeline_stu"<<endl;
-	
+
 	//fout.open("s2.txt", ios::out);
 	pipeline_stu(reads, read_length, read_count, fout);
 	cout<<"test5"<<endl;
